@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+from typing import Dict, Tuple
 
 # Load .env from the script directory first, then current working directory
 ENV_PATH = Path(__file__).resolve().parent / ".env"
@@ -39,7 +40,7 @@ ACCOUNTS = [
 
 # Format: BUY BTCUSD 1  or  SELL ETHUSD 2
 SIGNAL_REGEX = re.compile(r"^(BUY|SELL)\s+([A-Z0-9_-]+)\s+(\d+)$", re.IGNORECASE)
-PRODUCT_CACHE: dict[str, int] = {}
+PRODUCT_CACHE: Dict[str, int] = {}
 
 
 def load_products() -> None:
@@ -52,7 +53,7 @@ def load_products() -> None:
             PRODUCT_CACHE[p["symbol"].upper()] = int(p["id"])
 
 
-def sign_request(api_secret: str, method: str, path: str, query_string: str = "", payload: str = "") -> tuple[str, str]:
+def sign_request(api_secret: str, method: str, path: str, query_string: str = "", payload: str = "") -> Tuple[str, str]:
     timestamp = str(int(time.time()))
     prehash = f"{method.upper()}{timestamp}{path}{query_string}{payload}"
     signature = hmac.new(
