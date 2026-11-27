@@ -4,38 +4,46 @@ import json
 import os
 import re
 import time
+from pathlib import Path
+from dotenv import load_dotenv
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
+# Load .env from the script directory first, then current working directory
+ENV_PATH = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=ENV_PATH if ENV_PATH.exists() else None)
+
+
+def require_env(var_name: str) -> str:
+    value = os.environ.get(var_name, "").strip()
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {var_name}")
+    return value
+
+
 BASE_URL = "https://api.india.delta.exchange"
 
-# Configure Master + Slave accounts and lot multipliers
+BOT_TOKEN = require_env("TELEGRAM_BOT_TOKEN")
+ALLOWED_CHAT_ID = int(require_env("ALLOWED_CHAT_ID"))
+
+# Master-only configuration for initial testing
 ACCOUNTS = [
     {
         "name": "MASTER",
-        "key": os.environ["MASTER_KEY"],
-        "secret": os.environ["MASTER_SECRET"],
-        "multiplier": 1,
-    },
-    {
-        "name": "SLAVE_1",
-        "key": os.environ["SLAVE1_KEY"],
-        "secret": os.environ["SLAVE1_SECRET"],
+        "key": require_env("MASTER_KEY"),
+        "secret": require_env("MASTER_SECRET"),
         "multiplier": 1,
     },
 ]
 
-ALLOWED_CHAT_ID = int(os.environ["ALLOWED_CHAT_ID"])
-BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-
-# Format: BUY BTCUSD 2  or  SELL ETHUSD 5
+# Format: BUY BTCUSD 1  or  SELL ETHUSD 2
 SIGNAL_REGEX = re.compile(r"^(BUY|SELL)\s+([A-Z0-9_-]+)\s+(\d+)$", re.IGNORECASE)
 PRODUCT_CACHE: dict[str, int] = {}
 
 
 def load_products() -> None:
-    """Fetch active futures product IDs from Delta Exchange."""
+    """Fetch live futures product IDs from Delta Exchange."""
     resp = requests.get(f"{BASE_URL}/v2/products", timeout=10)
     resp.raise_for_status()
     products = resp.json().get("result", [])
@@ -81,10 +89,10 @@ def place_delta_order(api_key: str, api_secret: str, product_id: int, side: str,
 
 
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_chat.id != ALLOWED_CHAT_ID:
+    if not update.effective_chat or update.effective_chat.id != ALLOWED_CHAT_ID:
         return
     await update.effective_message.reply_text(
-        "Delta Copier Online.\nSend orders like:\n`BUY BTCUSD 1`\n`SELL ETHUSD 2`",
+        "Master Test Bot Online.\nSend a small test order like:\n`BUY BTCUSD 1`",
         parse_mode="Markdown",
     )
 
@@ -125,7 +133,7 @@ async def handle_trade_signal(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 if __name__ == "__main__":
     load_products()
-    print(f"Loaded {len(PRODUCT_CACHE)} live futures contracts.")
+    print(f"Loaded {len(PRODUCT_CACHE)} live futures contracts (Master-only test mode).")
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_trade_signal))
